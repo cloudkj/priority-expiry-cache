@@ -10,15 +10,14 @@ import java.util.TreeMap;
 
 public class PriorityExpiryCache<K, V> {
 
-    private int maxItems;
-
-    private final Map<K, Item> items;
+    private final Map<K, Entry> items;
     private final SortedMap<Long, Set<K>> expiryItems;
     private final SortedMap<Integer, LinkedHashSet<K>> priorityItems;
 
+    private int maxItems;
+
     public PriorityExpiryCache(final int maxItems) {
         this.maxItems = maxItems;
-
         this.items = new HashMap<>(maxItems);
         this.expiryItems = new TreeMap<>();
         this.priorityItems = new TreeMap<>();
@@ -33,7 +32,7 @@ public class PriorityExpiryCache<K, V> {
             return null;
         }
 
-        final Item item = items.get(key);
+        final Entry item = items.get(key);
 
         // Update LRU status of the key
         final LinkedHashSet<K> priorityKeys = priorityItems.get(item.getPriority());
@@ -52,7 +51,7 @@ public class PriorityExpiryCache<K, V> {
         }
 
         // Add to lookup table
-        final Item item = new Item(key, value, priority, expirationTimestamp);
+        final Entry item = new Entry(key, value, priority, expirationTimestamp);
         items.put(key, item);
 
         // Add to expiration tree
@@ -96,7 +95,7 @@ public class PriorityExpiryCache<K, V> {
     }
 
     private void removeKey(final K key) {
-        final Item item = items.get(key);
+        final Entry item = items.get(key);
 
         // Remove from lookup table
         items.remove(key);
@@ -122,13 +121,13 @@ public class PriorityExpiryCache<K, V> {
         return items.size() > maxItems;
     }
 
-    private class Item {
+    private class Entry {
         private final K key;
         private final V value;
         private final int priority;
         private final long expireTime;
 
-        private Item(K key, V value, int priority, long expireTime) {
+        private Entry(K key, V value, int priority, long expireTime) {
             this.key = key;
             this.value = value;
             this.priority = priority;
