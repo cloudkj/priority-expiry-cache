@@ -1,5 +1,6 @@
 package com.github.cloudkj;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -8,6 +9,17 @@ import java.util.Set;
 import java.util.SortedMap;
 import java.util.TreeMap;
 
+/**
+ * A cache with support for priorities, expiration times, and a max capacity.
+ *
+ * <p>This implementation provides {@code log(p)} runtime for the {@code get} operation, where p is the number of
+ * distinct priority levels amongst entries in the cache.</p>
+ *
+ * <p>Similarly, the {@code set} operation runs in {@code log(p) + log(t)} time, where t is the number of distinct
+ * distinct expiration timestamps. A performance improvement can be made by decreasing the granularity at which
+ * the timestamps are stored (and thus decreasing t, the number of distinct expiration timestamps), at the expense of
+ * lower precision in controlling the expiration time.</p>
+ */
 public class PriorityExpiryCache<K, V> {
 
     private final Map<K, Entry> items;
@@ -16,6 +28,11 @@ public class PriorityExpiryCache<K, V> {
 
     private int maxItems;
 
+    /**
+     * Constructs a new, empty cache with the specified max capacity.
+     *
+     * @param maxItems the max capacity of the cache
+     */
     public PriorityExpiryCache(final int maxItems) {
         this.maxItems = maxItems;
         this.items = new HashMap<>(maxItems);
@@ -23,18 +40,32 @@ public class PriorityExpiryCache<K, V> {
         this.priorityItems = new TreeMap<>();
     }
 
+    /**
+     * Get a view of the keys contained in this cache.
+     *
+     * @return an unmodifiable view of the cache keys.
+     */
     public Set<K> keys() {
-        return items.keySet();
+        return Collections.unmodifiableSet(items.keySet());
     }
 
+    /**
+     * Get the value of the key if the key exists in the cache and is not expired.
+     *
+     * @param  key the key of entry to retrieve
+     * @return value of the key, or null if key doesn't exist or is expired.
+     */
     public V get(final K key) {
         if (!items.containsKey(key)) {
             return null;
         }
 
         final Entry item = items.get(key);
+        if (item.getExpireTime() <  System.currentTimeMillis()) {
+            return null;
+        }
 
-        // Update LRU status of the key
+        // Update LRU status of the key - removing then adding the key back in maintains insertion order
         final LinkedHashSet<K> priorityKeys = priorityItems.get(item.getPriority());
         priorityKeys.remove(key);
         priorityKeys.add(key);
@@ -42,6 +73,14 @@ public class PriorityExpiryCache<K, V> {
         return item.getValue();
     }
 
+    /**
+     * Update or insert the value of the key with a priority value and expiration time.
+     *
+     * @param key          the key of entry to store
+     * @param value        the value of entry to store
+     * @param priority     the priority level of the cache entry
+     * @param timeToLiveMs number of milliseconds (relative to current time) after which the cache entry expires
+     */
     public void set(final K key, final V value, final int priority, final long timeToLiveMs) {
         final long expirationTimestamp = System.currentTimeMillis() + timeToLiveMs;
 
@@ -72,7 +111,17 @@ public class PriorityExpiryCache<K, V> {
         evictItems();
     }
 
-    public void evictItems() {
+    /**
+     * Evicts items from the cache (if needed) to ensure the number of items never exceeds {@code maxItems}.
+     *
+     * <p>The eviction policy is as follows:</p>
+     *
+     * <ol>
+     *   <li>1. Evict an expired item if any expired item exists.</li>
+     *   <li>2. If no expired item exists, then evict the LRU item of the lowest priority</li>
+     * </ol>
+     */
+    private void evictItems() {
         final long now = System.currentTimeMillis();
         while (shouldEvict()) {
 
@@ -94,6 +143,9 @@ public class PriorityExpiryCache<K, V> {
 
     }
 
+    /**
+     * Removes a key from all underlying data structures.
+     */
     private void removeKey(final K key) {
         final Entry item = items.get(key);
 
