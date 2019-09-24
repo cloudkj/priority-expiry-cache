@@ -6,6 +6,7 @@ import java.util.HashSet;
 public class PriorityExpiryCacheTest {
 
     public static void main(String[] args) throws InterruptedException {
+        test();
         testExpiration();
         testPriority();
         testLRU();
